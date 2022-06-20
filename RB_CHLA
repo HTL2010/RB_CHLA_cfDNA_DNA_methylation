@@ -1,0 +1,366 @@
+library(ComplexHeatmap)
+library(circlize) 
+library(ggplot2)
+library(edgeR)
+library(limma)
+library(matrixTests) 
+library(data.table)
+library(dplyr)
+library(stats)
+library(magick)
+library(clusterProfiler)
+library(ggrepel)
+library(made4)
+library(sesame)
+library(devtools)
+
+################  figure 1A
+df <- read.table(file='("/Users/HTL/RB_methylation_working_dataset.txt', sep = '\t', header =  
+   TRUE, check.names = F). #working dataset containing merged 450K data from GSE57362 and EPIC data 
+   for this study, removed probes associated with age, gender, and polymorphisms. 
+
+ttest_df_RBvsRE <- row_t_welch(df[,c(20:49)], df[,c(8:19)], alternative = "two.sided", mu = 0, 
+   conf.level = 0.95) 
+
+colnames(ttest_df_RBvsRE)[c(4,5,6,12)] <- c('mean_RB','mean_RE','deltaMean_RbRe','p_RbRe')
+df_1 <- cbind(ttest_df_RBvsRE[,c(4,5,6,12)], df[,c(1:97)])
+
+df_RbRe0.3p0.05 <- subset(df_1, abs(deltaMean_RbRe) > 0.3 & p_RbRe < 0.05) # 15483 
+   differentially methylated probes
+
+df_1$methylation[df_1$deltaMean_RbRe > 0.3] <- 'Hyper'. #2932 hyper
+df_1$methylation[df_1$deltaMean_RbRe < (-0.3)] <- 'Hypo'  #12551 hypo
+
+meta_1 <- read.table(file='new results/meta_1.txt', sep = '\t', header = TRUE,check.names = F)
+
+colours <- list(sample_type = c('Retina_NC' = 'green','Retina_SR' = 'green', 'RB_AH' = 'red', 
+   'RB_NC' = 'grey','RB_PT' = 'orange', 'RB_SR' = 'blue', 'Blood_CHLA' = 'brown', 'Blood_SR' = 
+   'pink')) 
+
+column_ha_F1A = HeatmapAnnotation(sample_type = meta_1[c(12:57),3],col = colours, 
+   annotation_name_side = "right", annotation_legend_param = list(title = 'Sample_type',   
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold"))) 
+
+hm_F1A = Heatmap(as.matrix(df_RbRe0.3p0.05[,c(12:57)]), col = colorRamp2(c(0,0.5,1),  
+   c("green", "black", "red")),column_title = "Figure1A",show_row_names = F,cluster_columns = 
+   T, cluster_rows = T, show_row_dend = T, show_heatmap_legend = T,heatmap_legend_param 
+   = list(title = "beta",color_bar = "continuous",at=c(0,0.5,1), grid_width = unit(0.5, "cm"), 
+   grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp = 
+   gpar(fontsize = 14,fontface = "bold")),column_names_gp = gpar(fontsize = 10, fontface = 
+   "bold"), na_col = "black", km = 1, top_annotation = column_ha_F1A) 
+hm_F1A = draw(hm_F1A, merge_legend = TRUE)
+
+###############################   figure 1C
+x<- DGEList(as.matrix(df_RbRe0.3p0.05[,c(12:57)]),cluster=meta_1[c(12:57),2]) 
+col <- c('orange','blue','green')[x$samples[[1]]]  
+mds<-plotMDS(x, labels = NULL, pch = 16,cex = 1.9, dim.plot = c(1,2),col = col,method = "logFC")
+
+###############################    figure 2A
+df_HCT116 <- read.delim("/Users/HTL/HCT116/HCT116_beta.csv",header=T,sep=",") 
+
+df_HCT116m <- melt(as.data.table(df_HCT116[,1:6]), na.rm = F, value.name ="Beta")
+
+ggplot(df_HCT116m, aes(x=Beta,color=variable))+
+  geom_density()
+ggplot(df_HCT116m, aes(x=variable, y=Beta,color=variable))+
+  geom_violin()+
+  stat_summary(fun=median, geom="point",size=2)+
+  theme_grey(base_size = 22)
+
+###############################    figure 2B 
+R2 <- lm(df_HCT116$1ng~df_HCT116$200ng) #apply this for each comparison
+summary(R2)
+
+colnames(df1715_raw) <-c("IlmnID","AH_CHLA_1","AH_CHLA_2","AH_CHLA_3",    
+      "AH_CHLA_4","RB_CHLA_1","RB_CHLA_2","RB_CHLA_3","RB_CHLA_4")
+
+tick <- colorRampPalette(c("navy blue","yellow","firebrick","firebrick"), space = "Lab")
+smoothScatter(y=df_HCT116$1ng,ylab="1ng", x=df_HCT116$200ng, xlab="200ng", 
+   nbin=1000,nrpoints=0,col="transparent",main="050",colramp=tick)
+
+###############################    figure 2C
+df1715 <- df1715_raw[4:865862,c(1,6:9,2:5)]
+
+x<- DGEList(as.matrix(df1715[,2:9]),cluster=meta_1[c(54:61),1]) 
+col <- c("orchid1",'light blue', 'grey', "orange", "purple","blue", "black","red")[x$samples[[1]]]
+mds<-plotMDS(x, labels = NULL, pch = 16,cex = 1.9, dim.plot = c(1,2),col = col,method = "logFC")
+legend("topleft",fill=c("orchid1",'light blue', 'grey', "orange", "purple","blue", "black","red"), 
+   legend=levels(as.factor(meta_1[c(54:61),1])), col=unique(sample_type[c(54:61),1])) #for RE + 
+   RB +CHLA_tumor
+
+###############################    figure 2D
+df1715$SD1715 <- apply(df1715[,2:9],1, sd, na.rm = TRUE)
+df1715 <- df1715[order(-df1715$SD),]
+column_ha_F2D = HeatmapAnnotation(sample_type = meta_1[c(54:61),3],col = colours, 
+   annotation_name_side = "right", annotation_legend_param = list(title = 'Sample_type', 
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold"))) 
+hm_F2D = Heatmap(as.matrix(df1715[c(1:10000),c(2:9)]), col = colorRamp2(c(0, 0.5, 1), 
+   c("green", "black", "red")),column_title = "Figure2D_top10000",show_row_names = 
+   F,cluster_columns = T, cluster_rows = T, show_heatmap_legend = T, show_row_dend = T, 
+   heatmap_legend_param = list(title = "Beta",color_bar = "continuous",at=c(0,0.5,1), 
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold")),column_names_gp = 
+   gpar(fontsize = 10, fontface = "bold"), na_col = "black", top_annotation = 
+   column_ha_F2D)#,right_annotation = row_ha,)
+hm_F2D <- draw(hm_F2D, merge_legend = TRUE)
+
+###############################    figure 3A
+column_ha_F3A = HeatmapAnnotation(sample_type = meta_1[c(12:72),3],col = colours, 
+   annotation_name_side = "right", annotation_legend_param = list(title = 'Sample_type', 
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold"))) 
+hm_F3A = Heatmap(as.matrix(df_RbRe0.3p0.05 [,12:72]), col = colorRamp2(c(0, 0.5, 1), 
+   c("green", "black", "red")),column_title = "Figure3A",show_row_names = F,cluster_columns = 
+   T, cluster_rows = T, show_row_dend = T, show_heatmap_legend = T,heatmap_legend_param 
+   = list(title = "Beta",color_bar = "continuous",at=c(0,0.5,1), grid_width = unit(0.5, "cm"), 
+   grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp = 
+   gpar(fontsize = 14,fontface = "bold")),column_names_gp = gpar(fontsize = 10, fontface = 
+   "bold"), na_col = "black", top_annotation = column_ha_F3A)#,right_annotation = row_ha,)
+hm_F3A <- draw(hm_F3A, merge_legend = TRUE)
+
+###############################    figure 3B
+x<- DGEList(as.matrix(df_RbRe0.3p0.05[,12:72]),cluster=meta_1[c(12:72),2]) 
+col <- c("red","orange",'blue',"green")[x$samples[[1]]] 
+mds<-plotMDS(x, labels = NULL, pch = 16,cex = 1.9, dim.plot = c(1,2),col = col,method = "logFC")
+
+
+##############################    supplementary figure 3
+column_ha_sF3 = HeatmapAnnotation(sample_type = meta_1[c(12:101),3],col = colours, 
+   annotation_name_side = "right", annotation_legend_param = list(title = 'Sample_type', 
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold"))) 
+hm_sF3 = Heatmap(as.matrix(df_RbRe0.3p0.05[,12:101]), col = colorRamp2(c(0, 0.5, 1), 
+   c("green", "black", "red")),column_title = "sF3",show_row_names = F,cluster_columns = T, 
+   cluster_rows = T, show_row_dend = T, show_heatmap_legend = T,heatmap_legend_param = 
+   list(title = "Beta",color_bar = "continuous",at=c(0,0.5,1), grid_width = unit(0.5, "cm"), 
+   grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp = 
+   gpar(fontsize = 14,fontface = "bold")),column_names_gp = gpar(fontsize = 10, fontface = 
+   "bold"), na_col = "black", top_annotation = column_ha_sF3)#,right_annotation = row_ha,)
+hm_sF3 <- draw(hm_sF3, merge_legend = TRUE)
+
+x<- DGEList(as.matrix(df_RbRe0.3p0.05_1[,12:101]), cluster=meta_1[c(12:101),2]) 
+col <- c('brown','pink',"red","orange",'blue',"green")[x$samples[[1]]] 
+mds<-plotMDS(x, labels = NULL, pch = 16,cex = 1.9, dim.plot = c(1,2),col = col,method = "logFC")
+
+##################################   figure 4a
+df_volc <- df_RbRe0.3p0.05[,c(1,3,4,10,11)]
+table(df_volc$Loci)
+df_volc$DM[df_volc$deltaMean_RbRe > 0.3] <- 'Hyper'
+df_volc$DM[df_volc$deltaMean_RbRe < (-0.3)] <- 'Hypo'
+ggplot(data=df_volc, aes(x=deltaMean_RbRe, y=-log10(p_RbRe), col=Loci, label = NA)) +
+  geom_point() + 
+  theme_minimal() +
+  geom_text_repel() +
+  scale_color_manual(values=c("blue", "darkgrey", "red")) +
+  geom_vline(xintercept=c(-0.3, 0.3), col="black") +
+  geom_hline(yintercept=-log10(0.01), col="black")  
+
+##################################   figure 4b
+####expression GSE125903
+df_125903 <- read.delim 
+   ("expressiondata/basespace/GSE125903/GSE125903_all.csv",header=T,sep=",")
+colnames(df_125903)[1] <- "geneName"
+df_125903_up <- subset(df_125903, Fold.Change > 2 & p < 0.05) #2592
+df_125903_down <- subset(df_125903, Fold.Change < (-2) & p < 0.05) #1986
+
+####expression GSE111168
+df_111168 <- read.delim("expression data/basespace/GSE111168/GSE111168_all.csv",header=T,sep=",")
+colnames(df_111168)[1] <- "geneName"
+df_111168_up <- subset(df_111168, Fold.Change > 2& p < 0.05) #3834
+df_111168_down <- subset(df_111168, Fold.Change < (-2) & p < 0.05) #3410
+
+#overlap of two expression dataset
+exp_up_ol <- merge(df_125903_up, df_111168_up, by = 'geneName') #889
+exp_down_ol <- merge(df_125903_down, df_111168_down, by = 'geneName') #382
+
+#######overlap with methylation data
+df_hyper <- subset(df_RbRe0.3p0.05, deltaMean_RbRe > 0.3) #2932
+df_hyper_P <- subset(df_hyper, Loci == "Promoter") #978
+df_hyper_B <- subset(df_hyper, Loci == "Body") #1178
+df_hyper_O <- subset(df_hyper, Loci == "Other") #776
+
+df_hypo <- subset(df_RbRe0.3p0.05, deltaMean_RbRe < (-0.3)) #12551
+df_hypo_P <- subset(df_hypo, Loci == "Promoter") #4949
+df_hypo_B <- subset(df_hypo, Loci == "Body") #3856
+df_hypo_O <- subset(df_hypo, Loci == "Other") #3746
+
+df_hyper_P_down <- merge(df_hyper_P, exp_down_ol, by = 'geneName') #35
+df_hyper_P_down <- df_hyper_P_down[!duplicated(df_hyper_P_down$geneName), ]#18
+df_hypo_P_up <- merge(df_hypo_P, exp_up_ol, by = 'geneName') #384
+df_hypo_P_up <- df_hypo_P_up[!duplicated(df_hypo_P_up$geneName), ]#172
+df_hyper_B_up <- merge(df_hyper_B, exp_up_ol, by = 'geneName') #73
+df_hyper_B_up <- df_hyper_B_up[!duplicated(df_hyper_B_up$geneName), ]#37
+df_hypo_B_down <- merge(df_hypo_B, exp_down_ol, by = 'geneName') #123
+df_hypo_B_down <- df_hypo_B_down[!duplicated(df_hypo_B_down$geneName), ]#67
+
+df_DMP_DEG <- rbind(df_hyper_P_down, df_hypo_P_up, df_hyper_B_up, 
+   df_hypo_B_down)#294
+
+ggplot(df_DMP_DEG, aes(x=deltaMean_RbRe, y=Log2FC)) + 
+  geom_point(aes(color=Loci)) + 
+  xlim((-1), 1) + ylim((-10), 10) + 
+  ggtitle("df4_DMP_DEG") + 
+  ylab("Log2FC (RB vs Retina)") + 
+  xlab("deltaMedian (RB vs Retina)") +  
+  scale_color_manual(values=c("blue", "red")) #, size=Loci, shape=cluster,
+
+###############       GSE58783    download the idat files and processed with minfi package
+RGset <- read.metharray.exp(base = '/Users/HTL/RB/GSE58785/GSE58783_idat')
+MSet.raw <-preprocessRaw(RGset)
+Meth.raw <- getMeth(MSet.raw)
+Unmeth.raw <- getUnmeth(MSet.raw)
+ratioSet <- ratioConvert(MSet.raw, what = "both", keepCN = TRUE)
+beta <- getBeta(ratioSet)
+pvalue <- detectionP(RGset, type = "m+u")
+pvalue_mat <- pvalue
+pvalue_mat[pvalue_mat > 0.05] <- NA
+pvalue_mat[pvalue_mat < 0.05] <- 0
+
+MSet.noob <- preprocessNoob(RGset, offset = 15, dyeCorr = TRUE, verbose = TRUE)
+ratioSet.noob <- ratioConvert(MSet.noob, what =  "both", keepCN = TRUE)
+beta.noob <- getBeta(ratioSet.noob)
+beta_noob <- as.data.frame(beta.noob)
+beta_noob$IlmnID <- row.names(beta_noob)
+noob_correct <- beta.noob + pvalue_mat
+write.table(noob_correct,"methylation/GSE58785/GSE58785_RAW/GSE58783_noob_correct.cs
+   v", row.names=T, sep=",")
+GSE58783 <- noob_correct
+ttest_df_ENvsSV <- row_t_welch(df[,c(54:57,64:66)], df[,c(58,61,62,63)], alternative = 
+   "two.sided", mu = 0, conf.level = 0.95) 
+colnames(ttest_df_ENvsSV)[c(4,5,6,12)] <- c('mean_EN','mean_SV','deltaMean_EnSv','p_EnSv')
+df_ENvsSV <- cbind(ttest_df_ENvsSV[,c(4,5,6,12)], df[,c(1:97)])
+df_GSE58783 <- merge(df_ENvsSV, GSE58783, by = 'IlmnID')
+df_EnSv0.4p0.01 <- subset(df_GSE58783, abs(deltaMean_EnSv) > 0.4 & p_EnSv < 0.01)
+df_EnSv_hypo <- subset(df_EnSv0.4p0.01, deltaMean_EnSv < (-0.4)) #804
+df_EnSv_hyper <- subset(df_EnSv0.4p0.01, deltaMean_EnSv > 0.4) #288
+df_EnSv0.4p0.01[,12:139] <- sapply(df_EnSv0.4p0.01[,12:139], as.numeric)
+######################## figure 5 heatmap & MDS
+colours <- list(sample_type = c('Retina_NC' = 'green','Retina_SR' = 'green', 'RB_AH' = 'red', 'RB_AH_PE' = 'darkgrey', 'RB_PT_PE' = 'darkgrey','RB_AH_ES' = 'orchid3', 'RB_AH_SV' = 'darkgreen', 'RB_NC' = 'cyan','RB_PT' = 'darkgrey', 'RB_SR' = 'blue', 'Blood_CHLA' = 'brown', 'Blood_SR' = 'pink','tumor' = 'black','cell line' = 'gold'), subtype = c("1" = 'blue', '2' = 'red', '3' = 'black', 'RB_AH_SV' = 'darkgreen'), cluster = c("a" = 'blue', 'b' = 'red', 'RB_AH_SV' = 'darkgreen'), stage = c('4A' = 'brown1','4B' = 'brown2','5A' = 'brown3','5B' = 'brown4'), Loci = c('Promoter' = '#00b0f0', 'Body' = '#df77cf', 'Other' = '#afabab')) 
+#########################  figure 5 A
+column_ha_5A = HeatmapAnnotation(sample_type = meta_2[c(58:69),2], col = colours,  
+   annotation_name_side = "right", annotation_legend_param = list(title = 'Sample_type', 
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold"))) 
+hm_F5A = Heatmap(as.matrix(df_EnSv0.4p0.01[,c(58:69)]), col = colorRamp2(c(0,0.5,1), 
+   c("green", "black", "red")),column_title = "Figure 5A",show_row_names = F,cluster_columns = 
+   T, cluster_rows = T, show_row_dend = F, show_heatmap_legend = T,heatmap_legend_param 
+   = list(title = "beta",color_bar = "continuous",at=c(0,0.5,1), grid_width = unit(0.5, "cm"), 
+   grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp = 
+   gpar(fontsize = 14,fontface = "bold")),column_names_gp = gpar(fontsize = 10, fontface = 
+   "bold"), na_col = "black", clustering_distance_columns = "pearson",top_annotation = 
+   column_ha_5A,split = factor(kclus$cluster, levels = c('1', '2')),cluster_row_slices = 
+   F) 
+hm_F5A <- draw(hm_F5A, merge_legend = TRUE)
+
+
+#########################  figure 5 B
+column_ha_5B = HeatmapAnnotation(sample_type = meta_2[c(24:53,58:69),2], col = colours, 
+   annotation_name_side = "right", annotation_legend_param = list(grid_width = unit(0.5, 
+   "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp = 
+   gpar(fontsize = 14,fontface = "bold")),show_annotation_name = F)  #stage = 
+   sample_type[c(24:69),10],
+hm_F5B = Heatmap(as.matrix(df_EnSv0.4p0.01[,c(24:53,58:69)]), col = colorRamp2(c(0,0.5,1), 
+   c("green", "black", "red")),column_title = "Figure 5B",show_row_names = F,cluster_columns = 
+   T, cluster_rows = T, show_row_dend = F, show_heatmap_legend = T,heatmap_legend_param 
+   = list(title = "beta",color_bar = "continuous",at=c(0,0.5,1), grid_width = unit(0.5, "cm"), 
+   grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp =  
+   gpar(fontsize = 14,fontface = "bold")),column_names_gp = gpar(fontsize = 10, fontface = 
+   "bold"), na_col = "black", clustering_distance_columns = "pearson",top_annotation = 
+   column_ha_5B,split = factor(kclus$cluster, levels = c('1', '2')),cluster_row_slices = 
+   FALSE) 
+hm_F5B <- draw(hm_F5B, merge_legend = TRUE)
+#########################  figure 5 C
+column_ha_5C = HeatmapAnnotation(sample_type = meta_2[c(58:136),2], col = colours, 
+   annotation_name_side = "right", annotation_legend_param = list(title = 'Sample_type', 
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold"))) 
+hm_5C = Heatmap(as.matrix(df_EnSv0.4p0.01[,c(58:136)]), col = colorRamp2(c(0,0.5,1), 
+   c("green", "black", "red")),column_title = "Figure 5C",show_row_names = F,cluster_columns = 
+   T, cluster_rows = T, show_row_dend = T, show_heatmap_legend = T,heatmap_legend_param 
+   = list(title = "beta",color_bar = "continuous",at=c(0,0.5,1), grid_width = unit(0.5, "cm"), 
+   grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp = 
+   gpar(fontsize = 14,fontface = "bold")),column_names_gp = gpar(fontsize = 10, fontface = 
+   "bold"), na_col = "black", km = 2, clustering_distance_columns = "pearson",top_annotation = 
+   column_ha_5C,split = factor(kclus$cluster, levels = c('1', '2')),cluster_row_slices = 
+   FALSE)
+hm_5C <- draw(hm_F5C, merge_legend = TRUE)
+########################  figure 5 D
+column_ha_5D = HeatmapAnnotation(sample_type = meta_2[c(24:136),2], col = colours, 
+   annotation_name_side = "right", annotation_legend_param = list(grid_width = unit(0.5, 
+   "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp = 
+   gpar(fontsize = 14,fontface = "bold")),show_annotation_name = F)  #, subtype = 
+   sample_type[c(24:136),8]    ,title = 'Sample_type', 
+hm_F5D = Heatmap(as.matrix(df_EnSv0.4p0.01[,c(24:136)]), col = colorRamp2(c(0,0.5,1), 
+   c("green", "black", "red")),column_title = "Figure 5D",show_row_names = F,cluster_columns = 
+   T, cluster_rows = T, show_row_dend = FALSE, show_heatmap_legend = 
+   T,heatmap_legend_param = list(title = "beta",color_bar = "continuous",at=c(0,0.5,1), 
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold")),column_names_gp =  
+   gpar(fontsize = 10, fontface = "bold"), na_col = "black", clustering_distance_columns = 
+   "pearson",top_annotation = column_ha_5D, split = factor(kclus$cluster, levels = c(1, 
+   2))) 
+hm_F5D <- draw(hm_F5D)
+
+x<- DGEList(as.matrix(df_EnSv0.4p0.01[,c(24:136)]),cluster=meta_2[c(24:136),2]) 
+col <- c('orchid3','grey','darkgreen','cyan','blue')[y$samples[[1]]]  
+mds<-plotMDS(y, labels = NULL, pch = 16,cex = 1.9, dim.plot = c(1,2),col = col,method = "logFC")
+
+z<- DGEList(as.matrix(df_EnSv0.4p0.01_2[,c(1:27,71:113)]), meta_3[c(12:38,82:124),2]) 
+col <- c('darkgreen','orange')[z$samples[[1]]]  
+mds<-plotMDS(z, labels = NULL, pch = 16,cex = 1.9, dim.plot = c(1,2),col = col,method = "logFC")
+######################### cluster a/b for figure 6A
+row.names(df_EnSv0.4p0.01) <- df5_EnSv0.4p0.01$IlmnID
+df_EnSv0.4p0.01_1 <- df_EnSv0.4p0.01[,c(24:136)]
+df_EnSv0.4p0.01_2 <- df_EnSv0.4p0.01_1[,c(column_order(hm_F5D))]
+df_EnSv0.4p0.01_3 <- df_EnSv0.4p0.01[,c(1:23,column_order(hm_F5D))]
+ttest_clusterAB <- row_t_welch(df_EnSv0.4p0.01_2[,c(71:113)], df_EnSv0.4p0.01_2[,c(1:27)], 
+   alternative = "two.sided", mu = 0, conf.level = 0.95) 
+colnames(ttest_clusterAB)[c(4,5,6,12)] <- c('mean_clusterB','mean_clusterA', 
+   'deltaMean_clusterAB','p_clusterAB')
+df_EnSv0.4p0.01_3 <- cbind(ttest_clusterAB[,c(4,5,6,12)], df_EnSv0.4p0.01_2)
+df_clusterAB0.4p0.01 <- subset(df_EnSv0.4p0.01_3, abs(deltaMean_clusterAB) > 0.4 & p_clusterAB < 0.01)  #320
+df_clusterAB0.4p0.01$IlmnID <- row.names(df_clusterAB0.4p0.01)
+df_clusterAB0.4p0.01_1 <- merge(df_EnSv0.4p0.01[,c(1,6:23)], df_clusterAB0.4p0.01, by = 'IlmnID') #for figure 6 box plot
+df_clusterAB0.4p0.01_2 <- df5_clusterAB0.4p0.01_1[,c(1:7,20:23,8:19,24:136)]
+df_clusterAB0.4p0.01_2[!duplicated(df5_clusterAB0.4p0.01_2$geneName), 1:11]
+df_clusterAB0.4p0.01_3 <- merge(df_clusterAB0.4p0.01_1[,c(1:11)], 
+   df_EnSv0.4p0.01[,c(1,12:139)], by = 'IlmnID') #for figure 6A heatmap
+
+colours <- list(sample_type = c('Retina_NC' = 'green','Retina_SR' = 'green', 'RB_AH' = 'red', 
+   'RB_AH_PE' = 'darkgrey','RB_PT_PE' = 'darkgrey','RB_AH_ES' = 'orchid3', 'RB_AH_SV' = 
+   'darkgreen', 'RB_NC' = 'cyan','RB_PT' = 'orange', 'RB_SR' = 'blue', 'Blood_CHLA' = 'brown', 
+   'Blood_SR' = 'pink'), subtype = c("1" = 'blue', '2' = 'red', '3' = 'black', 'RB_AH_SV' = 'darkgreen'), 
+   cluster = c("a" = 'green', 'b' = 'orange', 'RB_AH_SV' = 'darkgreen')) 
+column_ha_6A = HeatmapAnnotation(subtype = meta_2[c(70:136),8] , cluster = 
+   meta_2[c(70:136),9], col = colours, annotation_name_side = "right", 
+   annotation_legend_param = list(grid_width = unit(0.5, "cm"), grid_length = unit(1, 
+   "cm"),labels_gp = gpar(fontsize = 12, fontface = "bold"),title_gp = gpar(fontsize = 14,fontface 
+   = "bold")))
+hm_6A = Heatmap(as.matrix(df_clusterAB0.4p0.01_3[,c(70:136)]), col = colorRamp2(c(0,0.5,1), 
+   c("green", "black", "red")),column_title = "figure 6A",show_row_names = F,cluster_columns = 
+   T, cluster_rows = T, show_row_dend = FALSE, show_heatmap_legend = 
+   T,heatmap_legend_param = list(title = "beta",color_bar = "continuous",at=c(0,0.5,1), 
+   grid_width = unit(0.5, "cm"), grid_length = unit(1, "cm"),labels_gp = gpar(fontsize = 12, 
+   fontface = "bold"),title_gp = gpar(fontsize = 14,fontface = "bold")),column_names_gp = 
+   gpar(fontsize = 10, fontface = "bold"), na_col = "black", km = 2, clustering_distance_columns = 
+   "pearson",top_annotation = column_ha_6A)
+hm_6A <- draw(hm_F5D)
+
+df_clusterAB0.4p0.01_3 <- df_clusterAB0.4p0.01_1[!duplicated(df_clusterAB0.4p0.01_1$geneName), 1:11] #185 genes
+
+################## figure 6  boxplots
+ggplot(data = list_Figure6_t, aes(x = Cluster, y = cg17797591_AXIN2, fill = Cluster)) +
+  geom_boxplot()+
+  scale_fill_manual( values=c('green',"darkgreen", "red"))+
+  geom_jitter(color="black", size=1, alpha=0.9) +
+  ylim(0,1)
+
+#########################CNA for CHLA_RB/AH using sesame
+sesameDataCacheAll()
+sdfs.normal <- sesameDataGet('EPIC.5.SigDF.normal')
+sdf <- readIDATpair("1719_Liya-Xu EPIC DNA methylation data package/IDAT 
+   FILES/205648300012_R05C01")
+seg <-cnSegmentation(sdf, sdfs.normal)
+visualizeSegments(seg)#, (names(GenomicRanges::seqinfo(seg$bin.coords))))
